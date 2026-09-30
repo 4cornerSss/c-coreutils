@@ -3,10 +3,10 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-void remove_recursive(char *name, int supress_errors)
+void remove_recursive(char *name, int error)
 {
-	char full_path[1024];
 	struct stat sb;
+	char buffer[1024];
 
 	if(stat(name, &sb) == 0)
 	{
@@ -14,31 +14,27 @@ void remove_recursive(char *name, int supress_errors)
 		{
 			DIR *dir = opendir(name);
 			struct dirent *entry;
+
 			while((entry = readdir(dir)) != NULL)
 			{
 				if(strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
 				{
-					sprintf(full_path, "%s/%s", name, entry->d_name);		
-					remove_recursive(full_path, supress_errors);
+					sprintf(buffer, "%s/%s", name, entry->d_name);
+					remove_recursive(buffer, error);
 				}
-
 			}
+
 			closedir(dir);
 			remove(name);
 		}
 		else
 		{
-			int exam_file = remove(name);
-
-			if(exam_file != 0 && !supress_errors)
-			{
-				perror(name);
-			}
+			remove(name);
 		}
 	}
 	else
 	{
-		if(!supress_errors)
+		if(!error)
 		{
 			perror(name);
 		}
@@ -53,25 +49,25 @@ int main(int argc, char *argv[])
 	if(argc < 2)
 	{
 		fprintf(stderr, "rm: missing operand\n");
-		return 1;
 	}
 
-	if(!strcmp(argv[1], "-f"))
+	while(start_index < argc && argv[start_index][0] == '-')
 	{
-		start_index = 2;
-		supress_errors = 1;
-	}
+		if(strcmp(argv[start_index], "-f") == 0)
+		{
+			supress_errors = 1;
+		}
+		else if(strcmp(argv[start_index], "-r") == 0)
+		{
+			supress_recursive = 1;
+		}
+		else if(strcmp(argv[start_index], "-fr") == 0 || strcmp(argv[start_index], "-rf") == 0)
+		{
+			supress_errors = 1;
+			supress_recursive = 1;
+		}
 
-	if(!strcmp(argv[1], "-r"))
-	{
-		start_index = 2;
-		supress_recursive = 1;
-	}
-
-	if(strcmp(argv[1], "-rf") == 0 || strcmp(argv[1], "-fr") == 0)
-	{
-		supress_errors = 1;
-		supress_recursive = 1;
+		start_index++;
 	}
 
 	for(int i = start_index; i < argc; i++)
@@ -82,13 +78,15 @@ int main(int argc, char *argv[])
 		{
 			if(!supress_errors)
 			{
-				fprintf(stderr, "rm: %s: Is a directory\n", argv[i]);
+				fprintf(stderr, "rm: %s is a directory\n", argv[i]);
 			}
 		}
 		else
 		{
 			remove_recursive(argv[i], supress_errors);
 		}
+
 	}
+
 	return 0;
 }
