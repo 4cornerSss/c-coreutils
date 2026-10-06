@@ -1,41 +1,98 @@
 #include <stdio.h>
+#include <stdlib.h>
 
-#define BUF_SIZE 4096
+#define BUFFER_SIZE 1024
+
+int process_file(FILE *file)
+{
+	char buffer[BUFFER_SIZE];
+	size_t count_read;
+
+	while((count_read = fread(buffer, sizeof(buffer[0]), sizeof(buffer), file)) != 0)
+	{
+		size_t count_write;
+		size_t offset = 0;
+		size_t count = count_read;
+
+		while(count != 0)
+		{
+			count_write = fwrite(buffer + offset, sizeof(buffer[0]), count, stdout);
+
+			if(ferror(stdout))
+			{
+				perror("cat");
+				return EXIT_FAILURE;
+			}
+
+			if(count_write == 0)
+			{
+				return EXIT_FAILURE;
+			}
+
+			offset += count_write;
+			count -= count_write;
+
+		}
+
+	}	
+
+	if(ferror(file))
+	{
+		perror("cat");
+		return EXIT_FAILURE;
+	}
+
+	return 0;
+}
+
+int output_content_file(char *name)
+{
+	int result;
+	int result_close;
+
+	FILE *file = fopen(name, "r");
+	
+	if(file == NULL)
+	{
+		perror("cat");
+		return EXIT_FAILURE;
+	}
+
+	result = process_file(file);
+	result_close = fclose(file);
+
+	if(result != 0 || result_close != 0)
+	{
+		return 1;
+	}
+
+	return 0;
+}
 
 int main(int argc, char *argv[])
 {
-	char buf[BUF_SIZE];
+	int status = 0;
+	int result = 0;
+
 	if(argc == 1)
 	{
-		while((fgets(buf, sizeof(buf), stdin)) != NULL)
+		result = process_file(stdin);
+
+		if(result != 0)
 		{
-			printf("%s", buf);
+			return 1;
 		}
 	}
-	else
+
+	for(int i = 1; i < argc; i++)
 	{
-		int exit_code = 0;
+		result = output_content_file(argv[i]);
 
-		for(int i = 1; i < argc; i++)
+		if(result != 0)
 		{
-			FILE* fl = fopen(argv[i], "r");
-
-		        if(fl != NULL)
-			{
-				while(fgets(buf, sizeof(buf), fl) != NULL)
-				{
-					printf("%s", buf);
-				}
-				fclose(fl);
-			}
-			else
-			{
-				perror(argv[i]);
-				exit_code = 1;
-			}
+			status = 1;
 		}
-
-		return exit_code;
 	}
-	return 0;
+
+	return status;
 }
