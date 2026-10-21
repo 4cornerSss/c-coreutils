@@ -1,155 +1,190 @@
 #include <stdio.h>
-#include <sys/stat.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <errno.h>
 
-int create_dir(char *name, mode_t mode, int flag)
+int create_dir(const char *name_dir, const mode_t mode)
 {
-	int result_mkdir = 0;
-	int result_status = 0;
+	if(mkdir(name_dir, mode) != 0)
+	{
+		perror("mkdir");
+		return 1;
+	}
 
+	return 0;
+}
+
+int processed_dir(const char *name_dir, const mode_t mode)
+{
 	struct stat st;
 
-	if(stat(name, &st) != 0)
+	if(stat(name_dir, &st) != 0)
 	{
 		if(errno == ENOENT)
 		{
-			result_mkdir = mkdir(name, mode);
-
-			if(result_mkdir != 0)
+			if(create_dir(name_dir, mode) != 0)
 			{
-				perror("mkdir");
-				result_status = 1;
+				return 1;
 			}
 		}
 		else
 		{
-			perror("mkdir");
-			result_status = 1;
+			fprintf(stderr, "mkdir: cannot create directory ‘%s’: File exists\n", name_dir);
+			return 1;
 		}
 	}
 	else
 	{
-		if((S_ISDIR(st.st_mode)) && flag)
+		if(!S_ISDIR(st.st_mode))
 		{
-		}
-		else
-		{
-			perror("mkdir");
-			return EXIT_FAILURE;
+			fprintf(stderr, "mkdir: cannot create directory ‘%s’: File exists\n", name_dir);
+			return 1;
 		}
 	}
-
-	return result_status;
+	
+	return 0;
 }
 
-int main(int argc, char *argv[])
+int separation_path(char *part , char *path, mode_t mode)
 {
-	int start_index = 1;
-	int recursive = 0;
-	int result;
-	char *mode = NULL;
-	char *mode_8 = NULL;
-	char *part_str = NULL;
-	mode_t result_mode = 0755;
-
-	if(argc < 2)
+	if(part != NULL)
 	{
-		fprintf(stderr, "mkdir: missing operand\n");
-		return 1;
-	}
+		*part = '\0';
 
-	if(argv[1][0] == '-')
-	{
-		if(strcmp(argv[1], "-m") == 0)
+		if(path[0] != '\0')
 		{
-			start_index = 3;
-
-			if(argv[2] != NULL)
+			if(processed_dir(path, mode) != 0)
 			{
-				mode = argv[2];
-				result_mode = strtol(mode, &mode_8, 8);
-
-				if(mode == mode_8)
-				{
-					fprintf(stderr, "mkdir: invalid mode ‘%s’\n", mode);
-					return 1;
-				}
-
-				if(*mode_8 != '\0')
-				{
-					fprintf(stderr, "mkdir: invalid mode ‘%s’\n", mode);
-					return 1;
-				}
-			}
-			else
-			{
-				fprintf(stderr, "mkdir: missing operand\n");
+				*part = '/';
 				return 1;
 			}
 		}
-		else if(strcmp(argv[1], "-p") == 0)
+
+		*part = '/';
+
+		part = strchr(part + 1, '/');
+
+		if(separation_path(part, path, mode) != 0)
 		{
-			start_index = 2;
-			recursive = 1;
+			return 1;
 		}
-		else
+	}
+	else
+	{
+		if(processed_dir(path, mode) != 0)
 		{
-			fprintf(stderr, "mkdir: invalid option -- '%s'\n", argv[1]);
 			return 1;
 		}
 	}
 
-	if(argv[start_index] == NULL)
+	return 0;
+}
+
+int processed_path(char *trans_path, const mode_t mode)
+{
+	char *part_str = strchr(trans_path, '/');
+
+	if(separation_path(part_str, trans_path, mode) != 0)
 	{
-		fprintf(stderr, "mkdir: missing operand\n");
 		return 1;
 	}
 
-	for(int i = start_index; i < argc; i++)
+	return 0;
+}
+
+mode_t processed_mode(char *mode)
+{
+	char *mode_8 = NULL;
+
+	mode_t result_mode = strtol(mode, &mode_8, 8);
+
+	if(mode == mode_8)
 	{
-		if(recursive)
+		fprintf(stderr, "mkdir: invalid mode ‘%s’\n", mode);
+		return 1;
+	}
+
+	if(*mode_8 != '\0')
+	{
+		fprintf(stderr, "mkdir: invalid mode ‘%s’\n", mode);
+		return 1;
+	}
+
+	return result_mode;
+}
+
+int main(int argc, char *argv[])
+{
+	int status = 0;
+
+	int start_index = 0;
+	char *arguments[argc - 1];
+
+	int recursive = 0;
+	mode_t mode = 0755;
+
+	for(size_t i = 1; i < argc; i++)
+	{
+		if(argv[i][0] == '-')
 		{
-			char *search_pos = argv[i];
-			part_str = strchr(argv[i], '/');
-
-			while(part_str != NULL)
+			if(!strcmp(argv[i], "-p"))
 			{
-				*part_str = '\0';
-
-				if(argv[i][0] != '\0')
+				recursive = 1;
+			}
+			else if(!strcmp(argv[i], "-m"))
+			{
+				if(argv[i + 1] != NULL)
 				{
-					result = create_dir(argv[i], result_mode, recursive);
-				
-					if(result != 0)
+					if((mode = processed_mode(argv[i + 1])) == 0)
 					{
 						return 1;
 					}
 				}
+				else
+				{
+					fprintf(stderr, "mkdir: missing operand\n");
+					return 1;
+				}
 				
-				*part_str = '/';
-				search_pos = part_str + 1;
-				part_str = strchr(search_pos, '/');
+				i += 1;
 			}
-
-			result = create_dir(argv[i], result_mode, recursive);
-
-			if(result != 0)
+			else
 			{
+				fprintf(stderr, "mkdir: invalid option -- '%s'\n", argv[i]);
 				return 1;
 			}
 		}
 		else
 		{
-			result = create_dir(argv[i], result_mode, recursive);
+			arguments[start_index] = argv[i];
+			start_index += 1;
+		}
+	}
 
-			if(result != 0)
+	if(start_index == 0)
+	{
+		fprintf(stderr, "mkdir: missing operand\n");
+		return 1;
+	}
+
+	for(size_t i = 0; i < start_index; i++)
+	{
+		if(recursive)
+		{
+			if(processed_path(arguments[i], mode) != 0)
 			{
-				return 1;
+				status = 1;
+			}
+		}
+		else
+		{
+			if(processed_dir(arguments[i], mode) != 0)
+			{
+				status = 1;
 			}
 		}
 	}
 
-	return 0;
+	return status;
 }
