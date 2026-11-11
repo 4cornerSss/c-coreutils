@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
 	if(argc < 2)
 	{
 		fprintf(stderr, "rm: missing operand\n");
+		return 1;
 	}
 
 	while(start_index < argc && argv[start_index][0] == '-')
